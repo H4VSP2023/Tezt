@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GCash Txn Demo</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom font for a modern look */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f4f8; /* Softer background */
+        }
+        /* Custom styles for the GCash button aesthetic */
+        .pay-button-style {
+            background-color: #0c76e2; /* Deep blue */
+            box-shadow: 0 4px 10px rgba(12, 118, 226, 0.4);
+            transition: background-color 0.15s ease-in-out, transform 0.1s ease-in-out;
+        }
+        .pay-button-style:hover {
+            background-color: #095fab;
+        }
+        .pay-button-style:active {
+            transform: scale(0.98);
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+
+    <div id="main_app_card" class="w-full max-w-sm bg-white p-6 md:p-8 rounded-2xl shadow-xl border border-blue-50">
+        <h1 class="text-2xl font-bold text-gray-800 mb-4 text-center">Initiate GCash Transfer</h1>
+        <p class="text-gray-500 mb-6 text-center text-sm">Backend API endpoint is /tx-init.</p>
+
+        <!-- Transaction Form -->
+        <form id="txn_form" class="space-y-4">
+            <div>
+                <label for="amt_field" class="block text-sm font-medium text-gray-700 mb-1">Amount to Pay (PHP)</label>
+                <div class="relative rounded-lg shadow-sm">
+                    <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                        <span class="text-gray-500 sm:text-sm">₱</span>
+                    </div>
+                    <input type="number" id="amt_field" name="amount" step="0.01" min="1.00"
+                           class="block w-full rounded-lg border-gray-300 pl-7 pr-12 py-3 text-lg focus:border-blue-500 focus:ring-blue-500 transition duration-150 ease-in-out"
+                           placeholder="500.00" value="100.00" required>
+                    <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
+                        <span class="text-gray-500 sm:text-sm">PHP</span>
+                    </div>
+                </div>
+            </div>
+
+            <button type="submit"
+                    id="proc_btn"
+                    class="pay-button-style w-full flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-xl text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+                    >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 16H8v-3.5h3v3.5zm3.5-3.5H16V18h-3.5v-3.5zM12 4c4.41 0 8 3.59 8 8 0 4.41-3.59 8-8 8s-8-3.59-8-8c0-4.41 3.59-8 8-8zm-1 6h-3v3.5h3V10zm3.5 3.5H16V10h-3.5v3.5z"/>
+                    </svg>
+                    Pay via GCash
+            </button>
+        </form>
+
+        <!-- Feedback Area -->
+        <div id="info_display" class="mt-4 p-3 rounded-lg text-sm hidden" role="alert"></div>
+
+        <div class="mt-6 text-xs text-gray-400 text-center">
+            Backend runs on: <span class="font-semibold text-gray-500">http://localhost:5000</span>
+            <br>
+            Redirection target: <span class="font-semibold text-gray-500">/receipt-page</span>
+        </div>
+    </div>
+
+    <script>
+        const SERVICE_URL = 'http://localhost:5000/tx-init';
+        const txn_form = document.getElementById('txn_form');
+        const amt_field = document.getElementById('amt_field');
+        const proc_btn = document.getElementById('proc_btn');
+        const info_display = document.getElementById('info_display');
+
+        /**
+         * Shows user feedback in a styled box.
+         */
+        function show_feedback(msg_text, is_err = false) {
+            info_display.textContent = msg_text;
+            info_display.classList.remove('hidden', 'bg-green-100', 'text-green-800', 'bg-red-100', 'text-red-800');
+            if (is_err) {
+                info_display.classList.add('bg-red-100', 'text-red-800');
+            } else {
+                info_display.classList.add('bg-green-100', 'text-green-800');
+            }
+        }
+
+        /**
+         * Main function to handle transaction initiation.
+         */
+        async function process_payment(e) {
+            e.preventDefault();
+            const amt_val = amt_field.value;
+
+            if (parseFloat(amt_val) <= 0) {
+                show_feedback("Please input a non-zero amount.", true);
+                return;
+            }
+
+            // Lock UI and show loader
+            proc_btn.disabled = true;
+            proc_btn.innerHTML = `
+                <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Commencing...
+            `;
+            info_display.classList.add('hidden'); // Hide previous messages
+
+            // Construct the final return URL
+            const host_base = window.location.origin;
+            const return_loc = host_base + '/receipt-page'; // Target for PayMongo redirect
+
+            try {
+                const fetch_res = await fetch(SERVICE_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        amount: amt_val,
+                        return_url: return_loc // Sent to the Flask API
+                    })
+                });
+
+                const api_data = await fetch_res.json();
+
+                if (fetch_res.ok && api_data.ok) {
+                    show_feedback("Source created. Redirecting...", false);
+                    // Critical: Send user to PayMongo's secure hosted page
+                    window.location.href = api_data.redir_link;
+                } else {
+                    let err_msg = api_data.err || 'Failed API call.';
+                    if (api_data.details && api_data.details.errors && api_data.details.errors.length > 0) {
+                        err_msg += ": " + api_data.details.errors.map(err => err.detail).join(', ');
+                    }
+                    show_feedback(`API Error: ${err_msg}`, true);
+                }
+
+            } catch (network_error) {
+                console.error('Fetch issue:', network_error);
+                show_feedback(`Connection failure to backend at ${SERVICE_URL}.`, true);
+            } finally {
+                // Restore UI
+                proc_btn.disabled = false;
+                proc_btn.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 16H8v-3.5h3v3.5zm3.5-3.5H16V18h-3.5v-3.5zM12 4c4.41 0 8 3.59 8 8 0 4.41-3.59 8-8 8s-8-3.59-8-8c0-4.41 3.59-8 8-8zm-1 6h-3v3.5h3V10zm3.5 3.5H16V10h-3.5v3.5z"/>
+                    </svg>
+                    Pay via GCash
+                `;
+            }
+        }
+
+        txn_form.addEventListener('submit', process_payment);
+
+        // Client-side logic to handle the PayMongo redirect page
+        function redirect_post_processor() {
+            if (window.location.pathname === '/receipt-page') {
+                const main_card = document.getElementById('main_app_card');
+                const params = new URLSearchParams(window.location.search);
+                const source_id = params.get('source_id');
+                const final_status = params.get('status') || 'N/A';
+                // PayMongo source status will be 'pending' immediately after creation, 
+                // but might be 'paid' if the user completes it quickly.
+                const txn_ok = final_status === 'paid' || final_status === 'pending'; 
+
+                main_card.innerHTML = `
+                    <h1 class="text-2xl font-bold ${txn_ok ? 'text-green-600' : 'text-red-600'} mb-4 text-center">Transfer Status Update</h1>
+                    <p class="text-gray-600 mb-6 text-center">PayMongo redirected here. Source ID must now be processed on the backend.</p>
+                    <div class="space-y-2 p-4 bg-gray-50 rounded-xl border border-gray-200">
+                        <p class="text-sm font-semibold text-gray-700">Source Ref: <span class="font-normal text-gray-500">${source_id || 'N/A'}</span></p>
+                        <p class="text-sm font-semibold text-gray-700">Current Status: <span class="font-normal text-gray-500">${final_status.toUpperCase()}</span></p>
+                    </div>
+                    <a href="/" class="mt-6 block w-full text-center pay-button-style text-white px-4 py-2 rounded-xl">Back to Payment Start</a>
+                `;
+            }
+        }
+
+        redirect_post_processor();
+
+    </script>
+</body>
+</html>
+
